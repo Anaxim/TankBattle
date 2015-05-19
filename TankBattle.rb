@@ -293,7 +293,7 @@ class TankBattle < Gosu::Window
 			close
 		end
 		if @first_spawn
-			if @p1 != nil && id == Gosu::KbQ && Gosu::milliseconds > 350 + @p1.reload
+			if @p1 != nil && id == Gosu::KbLeftControl && Gosu::milliseconds > 350 + @p1.reload
 				@shots_1 << Bullet.new(self,@p1,"p1")
 				@p1.reload = Gosu::milliseconds
 			end
@@ -301,19 +301,15 @@ class TankBattle < Gosu::Window
 				@shots_2 << Bullet.new(self,@p2,"p2")
 				@p2.reload = Gosu::milliseconds
 			end
-			
-		end
-		if id == Gosu::KbR
-			@p1 = Tank.new(self,"tank-g",0)
-			@p1.warp(160,240,90)
-			@p1_losses = 0
-			@p2 = Tank.new(self,"tank-r",0)
-			@p2.warp(480,240,270)
-			@p2_losses = 0
-			@p1_victory,@p2_victory = false,false
-		end
-		if id == Gosu::KbT
-			puts @p1,@p2
+			if id == Gosu::KbR
+				@p1 = Tank.new(self,"tank-g",0)
+				@p1.warp(160,240,90)
+				@p1_losses = 0
+				@p2 = Tank.new(self,"tank-r",0)
+				@p2.warp(480,240,270)
+				@p2_losses = 0
+				@p1_victory,@p2_victory = false,false
+			end
 		end
 	end
 end
