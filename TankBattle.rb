@@ -1,13 +1,18 @@
 =begin
 TODO
-Consolidate movement code in Window
-Dedicated player nil check
+(?) Consolidate movement code in Window
+(?) Dedicated player nil check
+(V) Powerups
+(!) Stage changes
+(V) Finetune respawning
+(!) Consolidate shots and firing into tanks
+(!) Consolidate score and upgrades into tanks
 =end
 
 require 'gosu'
 
 class Tank
-	attr_accessor :x,:y,:angle,:f_speed, :reload
+	attr_accessor :x,:y,:angle,:f_speed, :reload_end, :reload_start, :fire_boost, :shield_state
 	
 	def initialize(window,tank,losses)
 		@image = Gosu::Image.new(window,"assets/tanks/#{tank}.png",true)
@@ -16,7 +21,14 @@ class Tank
 		@b_speed = 0.4*(1.0+(losses.to_f*0.03))
 		@deceleration = 0.6*(1.0+(losses.to_f*0.01))
 		@turn_speed = 2.0*(1.0+(losses.to_f*0.01))
-		@reload = 0
+		@reload_end = 0
+		@reload_start = 500
+		@speed_boost = false
+		@speed_boost_start = 0
+		@fire_boost = false
+		@fire_boost_start = 0
+		@shield_state = false
+		@shield = Gosu::Image.new(window,"assets/tanks/shield.png",true)
 	end
 	
 	def hitbox
@@ -46,6 +58,46 @@ class Tank
 		@vel_x -= Gosu::offset_x(@angle,@b_speed)
 		@vel_y -= Gosu::offset_y(@angle,@b_speed)
 	end
+	
+	def powerup(type)
+		case type
+		when "speed"
+			unless @speed_boots == true
+				@speed_boost = true
+				@f_speed += 0.15
+				@b_speed += 0.15
+				@deceleration += 0.05
+				@turn_speed += 0.05
+			end
+			@speed_boost_start = Gosu::milliseconds
+		when "fire"
+			unless @fire_boost == true
+				@fire_boost = true
+				@reload_start /= 2
+			end
+			@fire_boost_start = Gosu::milliseconds
+		when "shield"
+			unless @shield_state == true
+				@shield_state = true
+			end
+		else
+			nil
+		end
+	end
+	
+	def powerdown
+		if @speed_boost == true && Gosu::milliseconds > 5000 + @speed_boost_start
+			@f_speed -= 0.15
+			@b_speed -= 0.15
+			@deceleration -= 0.05
+			@turn_speed -= 0.05
+			@speed_boost = false
+		end
+		if @fire_boost == true && Gosu::milliseconds > 5000 + @fire_boost_start
+			@reload_start *= 2
+			@fire_boost = false
+		end
+	end
 		
 	def move
 		@x += @vel_x
@@ -73,6 +125,9 @@ class Tank
 	
 	def draw
 		@image.draw_rot(@x,@y,2,@angle)
+		if @shield_state == true
+			@shield.draw_rot(@x,@y,3,@angle)
+		end
 	end
 end
 
@@ -106,12 +161,37 @@ class Bullet
 	end
 end
 
+class PowerUp
+	def initialize(window,x,y,type)
+		@image = Gosu::Image.new(window,"assets/powerups/powerup_#{type}.png",true)
+		@x = x
+		@y = y
+		@type = type
+	end
+	
+	def effect(player)
+		player.powerup(@type)
+	end
+	
+	def hitbox
+		hitbox_x = ((@x - @image.width/2).to_i..(@x + @image.width/2).to_i).to_a
+		hitbox_y = ((@y - @image.width/2).to_i..(@y + @image.width/2).to_i).to_a
+		{:x => hitbox_x, :y => hitbox_y}
+	end
+	
+	def draw
+		@image.draw_rot(@x,@y,1,0)
+	end
+end
+
 class TankBattle < Gosu::Window
 	def initialize
 		super 640,480,false
 		self.caption = "TankBattle Prototype"
 		
 		@background_image = Gosu::Image.new(self,"assets/backgrounds/level1-bg.jpg",true)
+		@powerups = Array.new
+		@tick = 0
 		
 		@shots_1 = Array.new
 		@p1_losses = 0
@@ -129,14 +209,13 @@ class TankBattle < Gosu::Window
 		@p1_victory = false
 		@p2_victory = false
 		
-		@time = Gosu::Font.new(self, Gosu::default_font_name, 100)
 		@first_spawn = false
 		@victory_time = 0
 	end
 	
 	def spawn_in
 		if @first_spawn == false
-			if button_down?(Gosu::KbQ) && button_down?(Gosu::KbRightControl)
+			if button_down?(Gosu::KbLeftControl) && button_down?(Gosu::KbRightControl)
 				@p1 = Tank.new(self,"tank-g",0)
 				@p2 = Tank.new(self,"tank-r",0)
 				@p1.warp(160,240,270)
@@ -152,13 +231,13 @@ class TankBattle < Gosu::Window
 		detect_collisions
 		test_victory
 		test_close
+		
 		if @first_spawn
+			spawn_powerups
 			unless @p1_victory || @p2_victory
 				respawn
 			end
-		end
-		
-		if @first_spawn
+			
 			unless @p1 == nil
 				if button_down? Gosu::KbA then
 					@p1.turn_left
@@ -173,6 +252,7 @@ class TankBattle < Gosu::Window
 					@p1.reverse
 				end
 				@p1.move
+				@p1.powerdown
 			end
 		
 			unless @p2 == nil
@@ -189,12 +269,22 @@ class TankBattle < Gosu::Window
 					@p2.reverse
 				end
 				@p2.move
+				@p2.powerdown
 			end
 		end
-	
+		
 		@shots_1.each {|shot| shot.move}
 		@shots_2.each {|shot| shot.move}
 	end
+	
+	def spawn_powerups
+		powerups = ["speed","fire","shield"]
+		while @powerups.size < 6 && Gosu::milliseconds > 5000 + @tick
+			@tick = Gosu::milliseconds
+			@powerups << PowerUp.new(self,Gosu::random(50,590),Gosu::random(50,430),powerups.sample)
+		end
+	end
+	
 	
 	def test_close
 		if @p1_victory || @p2_victory
@@ -207,12 +297,22 @@ class TankBattle < Gosu::Window
 	def respawn
 		if @p1 == nil && Gosu::milliseconds > 750 + @p1_death_time
 			@p1 = Tank.new(self,"tank-g",@p1_losses)
-			@p1.warp(Gosu::random(40,160),Gosu::random(40,440),Gosu::random(20,160))
+			p1_y = Gosu::random(40,440)
+			if p1_y < 240
+				@p1.warp(Gosu::random(40,160),p1_y,Gosu::random(90,160))
+			else
+				@p1.warp(Gosu::random(40,160),p1_y,Gosu::random(20,90))
+			end
 		end
 		
 		if @p2 == nil && Gosu::milliseconds > 750 + @p2_death_time
 			@p2 = Tank.new(self,"tank-r",@p2_losses)
-			@p2.warp(Gosu::random(480,600),Gosu::random(40,440),Gosu::random(200,340))
+			p2_y = Gosu::random(40,440)
+			if p2_y < 240
+				@p2.warp(Gosu::random(480,600),p2_y,Gosu::random(200,270))
+			else
+				@p2.warp(Gosu::random(480,600),p2_y,Gosu::random(270,340))
+			end
 		end
 	end
 		
@@ -226,20 +326,44 @@ class TankBattle < Gosu::Window
 	def detect_collisions
 		@shots_2.each do |shot| 
 			if @p1 != nil && collision?(shot, @p1)
-				@shots_2.delete(shot)
-				@p1 = nil
-				@p1_death_time = Gosu::milliseconds
-				@p1_losses += 1
+				if @p1.shield_state == true
+					@shots_2.delete(shot)
+					@p1.shield_state = false
+				else
+					@shots_2.delete(shot)
+					@p1 = nil
+					@p1_death_time = Gosu::milliseconds
+					@p1_losses += 1
+				end
 			end
 		end
+		
 		@shots_1.each do |shot|
 			if @p2 != nil && collision?(shot, @p2)
-				@shots_1.delete(shot)
-				@p2 = nil
-				@p2_death_time = Gosu::milliseconds
-				@p2_losses += 1
+				if @p2.shield_state == true
+					@shots_1.delete(shot)
+					@p2.shield_state = false
+				else
+					@shots_1.delete(shot)
+					@p2 = nil
+					@p2_death_time = Gosu::milliseconds
+					@p2_losses += 1
+				end
 			end
 		end
+		
+		@powerups.each do |pu|
+			if @p1 != nil && collision?(@p1,pu)
+				@powerups.delete(pu)
+				pu.effect(@p1)
+			end
+			if @p2 != nil && collision?(@p2,pu)
+				@powerups.delete(pu)
+				pu.effect(@p2)
+			end
+		end
+		
+		
 		if @p1 != nil && @p2 != nil && collision?(@p1,@p2)
 			@p1,@p2 = nil,nil
 		end
@@ -277,6 +401,7 @@ class TankBattle < Gosu::Window
 				
 		@shots_1.each {|shot| shot.draw}
 		@shots_2.each {|shot| shot.draw}
+		@powerups.each {|pu| pu.draw}
 		
 		if @p1_victory
 			@victory_text.draw_rel("Player 1 wins!!!",320,240,10,0.5,0.5)
@@ -284,8 +409,6 @@ class TankBattle < Gosu::Window
 		if @p2_victory
 			@victory_text.draw_rel("Player 2 wins!!!",320,240,10,0.5,0.5)
 		end
-		
-		#@time.draw(Gosu::milliseconds,0,400,10)
 	end
 		
 	def button_down(id)
@@ -293,14 +416,20 @@ class TankBattle < Gosu::Window
 			close
 		end
 		if @first_spawn
-			if @p1 != nil && id == Gosu::KbLeftControl && Gosu::milliseconds > 350 + @p1.reload
+			if id == Gosu::KbM
+				@p1.shield_state, @p2.shield_state = true, true
+			end
+			
+			if @p1 != nil && id == Gosu::KbLeftControl && Gosu::milliseconds > @p1.reload_start + @p1.reload_end
 				@shots_1 << Bullet.new(self,@p1,"p1")
-				@p1.reload = Gosu::milliseconds
+				@p1.reload_end = Gosu::milliseconds
 			end
-			if @p2 != nil && id == Gosu::KbRightControl && Gosu::milliseconds > 350 + @p2.reload
+			
+			if @p2 != nil && id == Gosu::KbRightControl && Gosu::milliseconds > @p2.reload_start + @p2.reload_end
 				@shots_2 << Bullet.new(self,@p2,"p2")
-				@p2.reload = Gosu::milliseconds
+				@p2.reload_end = Gosu::milliseconds
 			end
+			
 			if id == Gosu::KbR
 				@p1 = Tank.new(self,"tank-g",0)
 				@p1.warp(160,240,90)
