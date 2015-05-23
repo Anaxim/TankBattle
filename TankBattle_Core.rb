@@ -19,35 +19,41 @@ class TankBattle < Gosu::Window
 		@first_spawn = false
 		@background_image = Gosu::Image.new(self,"assets/backgrounds/level1-bg.jpg",true)
 		@powerups = Array.new
-		@tick = 0
+		@score_counters = Gosu::Image.new(self,"assets/text/score_counters.png",true)
+		
+		@instructions = Gosu::Image.new(self,"assets/text/instructions.png",true)
 		
 		@p1_shots = Array.new
 		@p1_losses = 0
 		@p1_death_time = 0
-		@p1_score = Gosu::Font.new(self, Gosu::default_font_name, 20)
+		
 		@p1_victory = false
+		@p1_victory_text = Gosu::Image.new(self,"assets/text/player1wins.png",true)
 		
 		@p2_shots = Array.new
 		@p2_losses = 0
 		@p2_death_time = 0
-		@p2_score = Gosu::Font.new(self, Gosu::default_font_name, 20)
-		@p2_victory = false
 		
-		@victory_text = Gosu::Font.new(self, Gosu::default_font_name, 100)
-		@victory_time = 0
+		@p2_victory = false
+		@p2_victory_text = Gosu::Image.new(self,"assets/text/player2wins.png",true)
+		
+		@victory_text = Gosu::Image.new(self,"assets/text/below_vic.png",true)
 	end
 	
 	def update
 		spawn_in
 		
 		if @first_spawn
-			spawn_powerups
 			detect_collisions
 			test_victory
-			test_close
+			#test_close
+			
+			@p1_score = Gosu::Image.new(self,"assets/text/score_nums/g#{@p2_losses}.png",true)
+			@p2_score = Gosu::Image.new(self,"assets/text/score_nums/r#{@p1_losses}.png",true)
 			
 			unless @p1_victory || @p2_victory
 				respawn
+				spawn_powerups
 			end
 			
 			unless @p1 == nil
@@ -92,6 +98,10 @@ class TankBattle < Gosu::Window
 	def draw
 		@background_image.draw(0,0,0)
 		
+		unless @first_spawn
+			@instructions.draw(0,0,10)
+		end
+		
 		unless @p1 == nil
 			@p1.draw
 		end
@@ -100,18 +110,25 @@ class TankBattle < Gosu::Window
 			@p2.draw
 		end
 		
-		@p1_score.draw("P1 Score: #{@p2_losses}", 10, 10, 10)
-		@p2_score.draw("P2 Score: #{@p1_losses}", 530, 10, 10)
-				
+		if @first_spawn
+			@p1_score.draw(-5,0,10)
+			@p2_score.draw(0,0,10)
+			@score_counters.draw(0,0,10)
+		end
+		
 		@p1_shots.each {|shot| shot.draw}
 		@p2_shots.each {|shot| shot.draw}
 		@powerups.each {|pu| pu.draw}
 		
-		if @p1_victory
-			@victory_text.draw_rel("Player 1 wins!!!",320,240,10,0.5,0.5)
-		end
-		if @p2_victory
-			@victory_text.draw_rel("Player 2 wins!!!",320,240,10,0.5,0.5)
+		if @p1_victory || @p2_victory
+			if @p1_victory
+				@p1_victory_text.draw(0,0,10)
+			end
+			if @p2_victory
+				@p2_victory_text.draw(0,0,10)
+			end
+			@victory_text.draw(0,0,10)
+			@powerups = []
 		end
 	end
 	
@@ -124,6 +141,7 @@ class TankBattle < Gosu::Window
 				@p1.warp(160,240,270)
 				@p2.warp(480,240,90)
 				@first_spawn = true
+				@tick = Gosu::milliseconds
 			end
 		end
 	end
@@ -164,17 +182,18 @@ class TankBattle < Gosu::Window
 			if @p1_losses == 10
 				@p1,@p2 = nil,nil
 				@p2_victory = true
-				@victory_time = Gosu::milliseconds
+				#@victory_time = Gosu::milliseconds
 			end
 			
 			if @p2_losses == 10
 				@p1,@p2 = nil,nil
 				@p1_victory = true
-				@victory_time = Gosu::milliseconds
+				#@victory_time = Gosu::milliseconds
 			end
 		end
 	end
-
+	
+=begin
 	def test_close
 		if @p1_victory || @p2_victory
 			if Gosu::milliseconds > @victory_time + 2000
@@ -182,6 +201,7 @@ class TankBattle < Gosu::Window
 			end
 		end
 	end
+=end
 	
 	#collision testing
 	def collision?(object_1, object_2)
@@ -252,13 +272,17 @@ class TankBattle < Gosu::Window
 			end
 			
 			if id == Gosu::KbR
+				@powerups = []
 				@p1_victory,@p2_victory = false,false
 				@p1_losses = 0
+				@p1_death_time = 0
 				@p1 = Tank.new(self,"tank-g",@p1_losses,500)
-				@p1.warp(160,240,90)
+				@p1.warp(160,240,270)
 				@p2_losses = 0
+				@p2_death_time = 0
 				@p2 = Tank.new(self,"tank-r",@p2_losses,500)
-				@p2.warp(480,240,270)
+				@p2.warp(480,240,90)
+				@tick = Gosu::milliseconds
 			end
 		end
 	end
