@@ -88,7 +88,7 @@ class Tank
 	def powerup(type)
 		case type
 		when "speed"
-			unless @speed_boots == true
+			unless @speed_boost == true
 				@speed_boost = true
 				@f_speed += 0.15
 				@b_speed += 0.15
